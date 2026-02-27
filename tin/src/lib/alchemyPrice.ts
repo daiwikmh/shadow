@@ -4,7 +4,7 @@
 // Chainlink ETH/USD aggregator on Sepolia
 const CHAINLINK_ETH_USD = '0x694AA1769357215DE4FAC081bf1f309aDC325306';
 
-const ALCHEMY_RPC = process.env.NEXT_PUBLIC_ALCHEMY_RPC;
+const ALCHEMY_RPC = process.env.NEXT_PUBLIC_ALCHEMY_RPC || 'https://eth-sepolia.g.alchemy.com/v2/demo';
 // latestAnswer() selector: keccak256("latestAnswer()") = 0x50d25bcd
 const LATEST_ANSWER_SELECTOR = '0x50d25bcd';
 // latestTimestamp() selector: keccak256("latestTimestamp()") = 0x8205bf6a
