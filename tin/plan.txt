@@ -1,0 +1,366 @@
+lan: Shadow — Dark Pool UI for ETH/USDC
+
+ Context
+
+ Transform the existing tin/ Next.js skeleton into Shadow — a sleek, complete dark pool trading interface for ETH/USDC only. Wired to:
+ - sdp-ecloud Axum backend (POST /order, POST /match, GET /health) on port 3000
+ - Flashbots Sepolia bundle submission (https://relay-sepolia.flashbots.net)
+ - Alchemy Sepolia RPC for live ETH price (https://eth-sepolia.g.alchemy.com/v2/t7Oxw5b_OpDL6yQVWN70ZjxO6hTCaZeW)
+
+ The app never shows a public order book (dark pool principle). Users see only their own orders and anonymized fill activity.
+
+ ---
+ Design System
+
+ ┌────────────────┬────────────────────────┬─────────────────────┐
+ │     Token      │         Value          │        Usage        │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ bg             │ #080808                │ page background     │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ surface        │ #0D0D0D                │ panels              │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ surface-raised │ #111111                │ inputs, cards       │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ border         │ rgba(255,255,255,0.06) │ dividers            │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ accent         │ #7C5CFC                │ CTAs, active states │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ buy            │ #00D897                │ buy side            │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ sell           │ #FF3B5C                │ sell side           │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ text-primary   │ #F0F0F0                │ main text           │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ text-muted     │ #4A4A4A                │ labels              │
+ ├────────────────┼────────────────────────┼─────────────────────┤
+ │ font-numbers   │ Geist Mono             │ all prices          │
+ └────────────────┴────────────────────────┴─────────────────────┘
+
+ ---
+ Layout
+
+ ┌──────────────────────────────────────────────────────────────┐
+ │ ◈ SHADOW    ETH/USDC  $2,841.20  +1.24%  vol 12.4B  [0xab…] │  Header
+ ├───────────────────────────────────┬──────────────────────────┤
+ │                                   │ ┌── BUY │ SELL ────────┐ │
+ │  ETH/USDC TradingView Chart       │ │ Price  [___________] │ │
+ │  (BINANCE:ETHUSDC, dark, auto)    │ │ Size   [___________] │ │
+ │                                   │ │ [  Place Dark Order ] │ │
+ │                                   │ └─────────────────────┘ │
+ ├───────────────────────────────────┤ ┌── My Orders ─────────┐ │
+ │ ● Fill Feed (live, anonymized)    │ │ Pending              │ │
+ │ 0xab3f… BUY 1.2 ETH @ $2,841 2s │ │ • #abc BUY 1.2 ⏳   │ │
+ │ 0xcd7e… SELL 0.8 ETH @ $2,840 5s│ │ Matched              │ │
+ │                                   │ │ • #xyz SELL 0.8 ✅  │ │
+ └───────────────────────────────────┴──┴──────────────────────┘
+   ◈ TEE Attested │ Flashbots Protected │ Sepolia             AttestationBar
+
+ ---
+ Dependencies to Install
+
+ cd /home/daiwi/trade/tin
+ npm install ethers@^5 @flashbots/ethers-provider-bundle@^0.6
+ No wagmi/viem — use window.ethereum directly via ethers v5 (Web3Provider).
+
+ ---
+ Files
+
+ Modify existing
+
+ ┌─────────────────────────────┬────────────────────────────────────────────────────────────┐
+ │            File             │                           Change                           │
+ ├─────────────────────────────┼────────────────────────────────────────────────────────────┤
+ │ src/app/globals.css         │ Add Shadow tokens to @theme inline, set body bg to #080808 │
+ ├─────────────────────────────┼────────────────────────────────────────────────────────────┤
+ │ src/app/layout.tsx          │ Title → "Shadow — Dark Pool"                               │
+ ├─────────────────────────────┼────────────────────────────────────────────────────────────┤
+ │ src/configs/tradingPairs.ts │ Keep ETH/USDC only                                         │
+ ├─────────────────────────────┼────────────────────────────────────────────────────────────┤
+ │ src/app/page.tsx            │ Full replacement — Shadow layout                           │
+ └─────────────────────────────┴────────────────────────────────────────────────────────────┘
+
+ Create new
+
+ src/lib/sdpClient.ts
+
+ Typed fetch wrapper for sdp-ecloud:
+ - submitOrder(req) → POST /order
+ - runMatch() → POST /match
+ - health() → GET /health
+ - Price scale: user enters USD → multiply ×100 before sending (u64 cents), ÷100 on display
+
+ src/lib/alchemyPrice.ts
+
+ - Calls Chainlink ETH/USD feed on Sepolia (0x694AA1769357215DE4FAC081bf1f309aDC325306) via eth_call → latestAnswer()
+ - Alchemy RPC: https://eth-sepolia.g.alchemy.com/v2/t7Oxw5b_OpDL6yQVWN70ZjxO6hTCaZeW
+ - Returns { price: number, change24h: number }
+ - Polled every 15s from page.tsx via useEffect
+
+ src/lib/flashbots.ts
+
+ - Uses ethers@^5 + @flashbots/ethers-provider-bundle@^0.6
+ - Auth signer: ephemeral wallet (ethers.Wallet.createRandom()) per-session
+ - submitBundle(signedTxs: string[]): simulate → if ok, sendRawBundle for blocks +1..+10
+ - RPC: https://relay-sepolia.flashbots.net, chainId: Sepolia
+
+ src/components/shadow/Header.tsx
+
+ - Left: ◈ SHADOW logo (accent purple dot, mono text)
+ - Center: ETH / USDC  $2,841.20  +1.24%  Vol $12.4B (change colored buy/sell)
+ - Right: wallet connect button → window.ethereum → ethers Web3Provider → shows truncated address
+
+ src/components/shadow/OrderPanel.tsx
+
+ - BUY / SELL tabs (green / red underline)
+ - Price input (Geist Mono, placeholder "0.00")
+ - Size input (placeholder "0.0000 ETH")
+ - Estimated value line below inputs
+ - [Place Dark Order] — accent purple, subtle glow on hover
+ - On submit: sdpClient.submitOrder() → adds to local pendingOrders state
+ - Shows "Queued • #abc123" toast below button
+
+ src/components/shadow/FillFeed.tsx
+
+ - Polls sdpClient.runMatch() every 3s
+ - Keeps last 20 fills in state
+ - Each row: ● 0xab3f… BUY 1.200 ETH @ $2,841.00  2s ago
+   - dot pulses green/red on new fill (CSS animate-pulse)
+   - address: first 6 chars only
+   - time: relative "Xs ago"
+ - Empty state: "Waiting for fills…"
+
+ src/components/shadow/MyOrders.tsx
+
+ - Props: { pendingOrders: LocalOrder[], fills: FillInfo[] }
+ - Pending section: orders not yet in fills
+ - Matched section: orders found in fill results
+ - Each row: side badge, size, price, status icon (⏳ / ✅), short ID
+
+ src/components/shadow/AttestationBar.tsx
+
+ - Fixed bottom bar, 36px
+ - ◈ TEE Attested → links to https://verify.eigencloud.xyz
+ - Flashbots Protected → links to https://relay-sepolia.flashbots.net
+ - Sepolia Testnet
+ - Green pulsing dot when /health passes, red when offline
+
+ ---
+ page.tsx — Wiring
+
+ // State
+ walletAddress: string | null
+ ethPrice: number, change24h: number
+ myOrders: LocalOrder[]        // submitted by this session
+ backendOnline: boolean
+
+ // Effects
+ useEffect → poll alchemyPrice() every 15s
+ useEffect → poll health() every 10s
+ useEffect → try eth_accounts on mount (reconnect if already authorized)
+
+ // Layout
+ <div className="flex flex-col h-screen bg-[#080808]">
+   <Header ... />
+   <main className="flex flex-1 min-h-0">
+     <div className="flex flex-col flex-1">        {/* left: chart + feed */}
+       <ChartSection pair="ETH/USDC" />            {/* reused as-is */}
+       <FillFeed onNewFill={handleFill} />
+     </div>
+     <aside className="w-80 flex flex-col border-l border-white/[0.06]">
+       <OrderPanel onSubmit={handleOrder} />
+       <MyOrders pendingOrders={myOrders} fills={fills} />
+     </aside>
+   </main>
+   <AttestationBar online={backendOnline} />
+ </div>
+
+ ---
+ Implementation Order
+
+ 1. globals.css + layout.tsx — tokens + title
+ 2. lib/sdpClient.ts — API layer
+ 3. lib/alchemyPrice.ts — price feed
+ 4. lib/flashbots.ts — bundle stub
+ 5. components/shadow/Header.tsx
+ 6. components/shadow/OrderPanel.tsx
+ 7. components/shadow/FillFeed.tsx
+ 8. components/shadow/MyOrders.tsx
+ 9. components/shadow/AttestationBar.tsx
+ 10. configs/tradingPairs.ts — trim to ETH/USDC
+ 11. app/page.tsx — full replacement
+
+ ---
+ Part 2: Real Transaction Execution — SDP On-Chain Integration
+
+ Goal
+
+ Wire the dark pool to real DEX liquidity so that matched fills become actual on-chain swaps — executed atomically, MEV-protected, inside a Flashbots bundle.
+
+ Architecture
+
+ User A (BUY 1 ETH @ $2841)  ──┐
+                                 ├──▶  MatchEngine (TEE)
+ User B (SELL 1 ETH @ $2841) ──┘         │
+                                          │ MatchResult
+                                          ▼
+                                PreScreener (revm sandbox)
+                                     simulates Uniswap v3 swap
+                                     checks slippage < 0.5%
+                                          │ SimResult::Ok
+                                          ▼
+                                SdpSettlement.sol (Sepolia)
+                                     calls Uniswap v3 Router
+                                     atomic: match + swap + settle
+                                          │
+                                          ▼
+                                Flashbots Bundle
+                                     simulate → sendRawBundle
+                                     blocks +1..+10
+
+ Step 1 — Deploy SdpSettlement.sol
+
+ // SPDX-License-Identifier: MIT
+ pragma solidity ^0.8.24;
+
+ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+ contract SdpSettlement {
+     ISwapRouter public immutable router;
+     address public immutable WETH;
+     address public immutable USDC;
+
+     // keccak256 of TEE attestation public key — only TEE can call settle()
+     address public immutable teeWallet;
+
+     constructor(address _router, address _weth, address _usdc, address _tee) {
+         router = ISwapRouter(_router);
+         WETH = _weth; USDC = _usdc; teeWallet = _tee;
+     }
+
+     /// Called by the TEE relayer with a matched fill.
+     /// Executes the swap atomically on Uniswap v3.
+     function settle(
+         bytes32 buyOrderId,
+         bytes32 sellOrderId,
+         uint256 amountIn,     // USDC amount (buyer pays)
+         uint256 amountOutMin  // min WETH out (slippage guard)
+     ) external {
+         require(msg.sender == teeWallet, "not TEE");
+
+         IERC20(USDC).transferFrom(msg.sender, address(this), amountIn);
+         IERC20(USDC).approve(address(router), amountIn);
+
+         router.exactInputSingle(ISwapRouter.ExactInputSingleParams({
+             tokenIn:  USDC,
+             tokenOut: WETH,
+             fee:      500,          // 0.05% pool
+             recipient: msg.sender,  // TEE wallet receives WETH, distributes to users
+             deadline: block.timestamp + 60,
+             amountIn: amountIn,
+             amountOutMinimum: amountOutMin,
+             sqrtPriceLimitX96: 0
+         }));
+
+         emit Settled(buyOrderId, sellOrderId, amountIn, block.number);
+     }
+
+     event Settled(bytes32 buyId, bytes32 sellId, uint256 amount, uint256 block);
+ }
+
+ Sepolia addresses:
+ - Uniswap v3 Router: 0xE592427A0AEce92De3Edee1F18E0157C05861564
+ - WETH: 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14
+ - USDC: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+
+ Deploy with:
+ cd sdp/contracts
+ forge create SdpSettlement \
+   --rpc-url https://eth-sepolia.g.alchemy.com/v2/t7Oxw5b_OpDL6yQVWN70ZjxO6hTCaZeW \
+   --private-key $PRIVATE_KEY \
+   --constructor-args 0xE592427... 0xfFf997... 0x1c7D4B... $TEE_WALLET_ADDRESS
+
+ Step 2 — Update sdp-ecloud relayer to call SdpSettlement
+
+ In relayer/src/lib.rs, replace the placeholder calldata encoder with real ABI encoding:
+
+ // Set SETTLEMENT_CONTRACT env var to deployed address
+ // relay_match() builds:
+ //   settle(buy_id, sell_id, amount_usdc, min_weth_out)
+ // amount_usdc = fill.price * fill.quantity / 100  (cents → USDC 6-dec)
+ // min_weth_out = amount_usdc * 0.995 / eth_price  (0.5% slippage tolerance)
+
+ The TEE wallet must hold USDC + ETH for gas. Fund it via faucet.
+
+ Step 3 — Update PreScreener to fork real Sepolia state
+
+ In pre-screener/src/lib.rs, under tee feature:
+ // Use alloy ForkDB against Alchemy Sepolia
+ // Simulates the exact settle() calldata in revm
+ // Checks: actual Uniswap price impact, gas, revert
+ let db = ForkDb::new("https://eth-sepolia.g.alchemy.com/v2/...").await;
+
+ Step 4 — Flashbots Bundle (from UI lib/flashbots.ts)
+
+ After the fill is returned, the UI packages:
+ 1. User A approval tx (USDC.approve(SdpSettlement, amount))
+ 2. TEE's settle() tx (already signed by sdp-ecloud relayer)
+ 3. Submits as a bundle → atomic, either both land or neither
+
+ const bundle = [
+   { signedTransaction: userApprovalTx },
+   { signedTransaction: settleSignedTx },
+ ];
+ await flashbotsProvider.sendRawBundle(bundle, blockNumber + 1);
+
+ Step 5 — Uniswap Price Feed Integration
+
+ Replace Chainlink ETH/USD poll with Uniswap v3 TWAP on Sepolia:
+ // Call WETH/USDC 0.05% pool observe() for 5-minute TWAP
+ // Pool on Sepolia: query via Uniswap subgraph or direct pool address
+
+ Or keep Chainlink for price display, use Uniswap only for swap execution.
+
+ Files to create/modify for real integration
+
+ ┌─────────────────────────────────┬─────────────────────────────────────────────────┐
+ │              File               │                     Action                      │
+ ├─────────────────────────────────┼─────────────────────────────────────────────────┤
+ │ sdp/contracts/SdpSettlement.sol │ New — settlement + Uniswap router call          │
+ ├─────────────────────────────────┼─────────────────────────────────────────────────┤
+ │ sdp/contracts/foundry.toml      │ New — Foundry project for deploy                │
+ ├─────────────────────────────────┼─────────────────────────────────────────────────┤
+ │ ecloud/relayer/src/lib.rs       │ Update encode_settlement_calldata with real ABI │
+ ├─────────────────────────────────┼─────────────────────────────────────────────────┤
+ │ ecloud/pre-screener/src/lib.rs  │ Add tee feature: ForkDB from Alchemy            │
+ ├─────────────────────────────────┼─────────────────────────────────────────────────┤
+ │ tin/src/lib/flashbots.ts        │ Full implementation with bundle logic           │
+ ├─────────────────────────────────┼─────────────────────────────────────────────────┤
+ │ sdp-ecloud/.env                 │ Add SETTLEMENT_CONTRACT=0x...                   │
+ └─────────────────────────────────┴─────────────────────────────────────────────────┘
+
+ Env vars for full production flow
+
+ MNEMONIC=...                           # from EigenCompute KMS (TEE) or .env (dev)
+ SETTLEMENT_CONTRACT=0x<deployed>
+ RPC_URL=https://eth-sepolia.g.alchemy.com/v2/t7Oxw5b_OpDL6yQVWN70ZjxO6hTCaZeW
+ FLASHBOTS_RPC=https://relay-sepolia.flashbots.net
+
+ ---
+ Verification
+
+ # Terminal 1 — backend
+ cd /home/daiwi/trade/sdp/sdp-ecloud
+ MNEMONIC="test test test test test test test test test test test junk" cargo run
+
+ # Terminal 2 — UI (Next uses 3001 since 3000 is taken by backend)
+ cd /home/daiwi/trade/tin && npm run dev
+ # open http://localhost:3001
+
+ Test flow:
+ 1. Page loads → Shadow header shows live ETH price from Alchemy Sepolia
+ 2. AttestationBar green dot → backend healthy
+ 3. Connect wallet → MetaMask → address shown in header
+ 4. Place BUY order → queued in My Orders
+ 5. Place SELL at same price → queued
+ 6. FillFeed polls every 3s → fill appears, My Orders updates to Matched ✅
