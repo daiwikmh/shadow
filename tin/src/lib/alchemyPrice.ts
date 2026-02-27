@@ -1,6 +1,5 @@
 // alchemyPrice.ts — Chainlink ETH/USD price feed via Alchemy Sepolia RPC
 
-const ALCHEMY_RPC = 'https://eth-sepolia.g.alchemy.com/v2/t7Oxw5b_OpDL6yQVWN70ZjxO6hTCaZeW';
 
 // Chainlink ETH/USD aggregator on Sepolia
 const CHAINLINK_ETH_USD = '0x694AA1769357215DE4FAC081bf1f309aDC325306';

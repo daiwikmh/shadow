@@ -10,10 +10,14 @@
   },
   "dependencies": {
     "@flashbots/ethers-provider-bundle": "^0.6.2",
+    "@metamask/sdk": "^0.34.0",
+    "@tanstack/react-query": "^5.90.21",
     "ethers": "^5.8.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "viem": "2.x",
+    "wagmi": "^3.5.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
