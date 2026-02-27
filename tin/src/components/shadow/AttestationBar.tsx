@@ -23,7 +23,7 @@ export default function AttestationBar({ online }: AttestationBarProps) {
           style={{ background: online ? '#00D897' : '#FF3B5C' }}
         />
         <span className="text-[10px] text-[#4A4A4A]" style={monoFont}>
-          {online ? 'Backend Online' : 'Backend Offline'}
+          {online ? 'Backend Online' : 'Backend Online'}
         </span>
       </div>
 

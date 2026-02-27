@@ -142,7 +142,7 @@ lan: Shadow — Dark Pool UI for ETH/USDC
  - ◈ TEE Attested → links to https://verify.eigencloud.xyz
  - Flashbots Protected → links to https://relay-sepolia.flashbots.net
  - Sepolia Testnet
- - Green pulsing dot when /health passes, red when offline
+ - Green pulsing dot when /health passes, red when Online
 
  ---
  page.tsx — Wiring
