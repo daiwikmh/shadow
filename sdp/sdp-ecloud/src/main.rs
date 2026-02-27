@@ -143,7 +143,11 @@ async fn run_match(
         });
     }
 
-    Json(MatchResponse { fills: results.len(), results })
+    let fill_count = results.len();
+    if fill_count > 0 {
+        println!("SDP ECloud | matched {fill_count} fill(s) this cycle");
+    }
+    Json(MatchResponse { fills: fill_count, results })
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

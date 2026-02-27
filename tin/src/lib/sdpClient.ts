@@ -2,7 +2,7 @@
 // Price scale: user USD → ×100 before sending (u64 cents), ÷100 on display
 // Size scale:  user ETH → ×1_000_000 before sending (u64 ETH-6), ÷1_000_000 on display
 
-const SDP_BASE = 'http://localhost:3000';
+const SDP_BASE = process.env.NEXT_PUBLIC_SDP_URL ?? 'http://localhost:3000';
 
 export type Side = 'buy' | 'sell';
 
